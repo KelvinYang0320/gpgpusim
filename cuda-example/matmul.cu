@@ -10,28 +10,29 @@
 #include <stdlib.h>
 #include <assert.h>
 
-__global__ void gpu_matrix_mult(int *a,int *b, int *c, int m, int n, int k)
-{ 
-    int row = blockIdx.y * blockDim.y + threadIdx.y; 
+__global__ void gpu_matrix_mult(int *a, int *b, int *c, int m, int n, int k)
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int sum = 0;
-    if( col < k && row < m) 
+    if (col < k && row < m)
     {
-        for(int i = 0; i < n; i++) 
+        for (int i = 0; i < n; i++)
         {
             sum += a[row * n + i] * b[i * k + col];
         }
         c[row * k + col] = sum;
     }
-} 
+}
 
-void cpu_matrix_mult(int *h_a, int *h_b, int *h_result, int m, int n, int k) {
-    for (int i = 0; i < m; ++i) 
+void cpu_matrix_mult(int *h_a, int *h_b, int *h_result, int m, int n, int k)
+{
+    for (int i = 0; i < m; ++i)
     {
-        for (int j = 0; j < k; ++j) 
+        for (int j = 0; j < k; ++j)
         {
             int tmp = 0.0;
-            for (int h = 0; h < n; ++h) 
+            for (int h = 0; h < n; ++h)
             {
                 tmp += h_a[i * n + h] * h_b[h * k + j];
             }
@@ -43,53 +44,64 @@ void cpu_matrix_mult(int *h_a, int *h_b, int *h_result, int m, int n, int k) {
 int main(int argc, char const *argv[])
 {
     int m, n, k;
+
+    int x_dim, y_dim;
+    char *p1;
+    char *p2;
+    x_dim = strtol(argv[1], &p1, 10);
+    y_dim = strtol(argv[2], &p2, 10);
+
     /* Fixed seed for illustration */
     srand(3333);
     m = n = k = 128;
 
     // allocate memory in host RAM, h_cc is used to store CPU result
     int *h_a, *h_b, *h_c, *h_cc;
-    cudaMallocHost((void **) &h_a, sizeof(int)*m*n);
-    cudaMallocHost((void **) &h_b, sizeof(int)*n*k);
-    cudaMallocHost((void **) &h_c, sizeof(int)*m*k);
-    cudaMallocHost((void **) &h_cc, sizeof(int)*m*k);
+    cudaMallocHost((void **)&h_a, sizeof(int) * m * n);
+    cudaMallocHost((void **)&h_b, sizeof(int) * n * k);
+    cudaMallocHost((void **)&h_c, sizeof(int) * m * k);
+    cudaMallocHost((void **)&h_cc, sizeof(int) * m * k);
 
     // random initialize matrix A
-    for (int i = 0; i < m; ++i) {
-        for (int j = 0; j < n; ++j) {
+    for (int i = 0; i < m; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
             h_a[i * n + j] = rand() % 1024;
         }
     }
 
     // random initialize matrix B
-    for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < k; ++j) {
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < k; ++j)
+        {
             h_b[i * k + j] = rand() % 1024;
         }
     }
 
-    // Allocate memory space on the device 
+    // Allocate memory space on the device
     int *d_a, *d_b, *d_c;
-    cudaMalloc((void **) &d_a, sizeof(int)*m*n);
-    cudaMalloc((void **) &d_b, sizeof(int)*n*k);
-    cudaMalloc((void **) &d_c, sizeof(int)*m*k);
+    cudaMalloc((void **)&d_a, sizeof(int) * m * n);
+    cudaMalloc((void **)&d_b, sizeof(int) * n * k);
+    cudaMalloc((void **)&d_c, sizeof(int) * m * k);
 
     // copy matrix A and B from host to device memory
-    cudaMemcpy(d_a, h_a, sizeof(int)*m*n, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_b, h_b, sizeof(int)*n*k, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_a, h_a, sizeof(int) * m * n, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_b, h_b, sizeof(int) * n * k, cudaMemcpyHostToDevice);
 
-    unsigned int x_size = 16;
-    unsigned int y_size = 16;
+    unsigned int x_size = x_dim;
+    unsigned int y_size = y_dim;
     unsigned int grid_cols = (m + x_size - 1) / x_size;
     unsigned int grid_rows = (k + y_size - 1) / y_size;
     dim3 dimGrid(grid_cols, grid_rows);
     dim3 dimBlock(x_size, y_size);
-   
-    // Launch kernel 
+
+    // Launch kernel
     gpu_matrix_mult<<<dimGrid, dimBlock>>>(d_a, d_b, d_c, m, n, k);
-    
-    // Transefr results from device to host 
-    cudaMemcpy(h_c, d_c, sizeof(int)*m*k, cudaMemcpyDeviceToHost);
+
+    // Transefr results from device to host
+    cudaMemcpy(h_c, d_c, sizeof(int) * m * k, cudaMemcpyDeviceToHost);
 
     // start the CPU version
     cpu_matrix_mult(h_a, h_b, h_cc, m, n, k);
@@ -101,7 +113,7 @@ int main(int argc, char const *argv[])
         for (int j = 0; j < k; ++j)
         {
             //printf("[%d][%d]:%d == [%d][%d]:%d, ", i, j, h_cc[i*k + j], i, j, h_c[i*k + j]);
-            if(h_cc[i*k + j] != h_c[i*k + j])
+            if (h_cc[i * k + j] != h_c[i * k + j])
             {
                 all_ok = 0;
             }
@@ -109,7 +121,7 @@ int main(int argc, char const *argv[])
         //printf("\n");
     }
 
-    if(all_ok)
+    if (all_ok)
     {
         printf("all results are correct!!!\n");
     }
